@@ -1,13 +1,14 @@
 package rainbowtable;
 
 import java.util.*;
+import java.util.zip.GZIPOutputStream;
 
-import com.sun.glass.ui.TouchInputSupport;
 
-import sun.security.util.Length;
-
-import java.awt.print.Printable;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.io.UnsupportedEncodingException;
+import java.io.Writer;
 import java.security.MessageDigest;
 
 
@@ -18,6 +19,11 @@ import java.security.MessageDigest;
  */
 
 public class RAINBOW {
+	static HashMap <String, Integer> unique_words = new HashMap<String, Integer>();
+	static HashMap <String, String> rainbow_table = new HashMap<String, String>();
+	static HashMap <String, String> rainbow_table2 = new HashMap<String, String>();
+	static HashMap <String, String> rainbow_table3 = new HashMap<String, String>();
+	static HashMap <String, String> rainbow_table4 = new HashMap<String, String>();
 	
 	static MessageDigest md = SHA1constructor();
 	
@@ -39,92 +45,162 @@ public class RAINBOW {
 		return javax.xml.bind.DatatypeConverter.printHexBinary(input);
 	} 
 	
-	static byte[] sha1 (byte[] input){
+	static byte[] hexToByteArray(String s){
+		return javax.xml.bind.DatatypeConverter.parseHexBinary(s);
+	}
+	
+	static byte[] sha1(byte[] input){
 		return md.digest(input);	
 	}
 	
-	static byte[] reduce(byte[] digest) throws UnsupportedEncodingException{
-		byte[] char1 = Arrays.copyOfRange(digest, 0, 1);
-		byte[] char2 = Arrays.copyOfRange(digest, 1, 2);
-		byte[] char3 = Arrays.copyOfRange(digest, 2, 3);
-		byte[] word = new byte[char1.length + char2.length + char3.length];
-		System.arraycopy(char1, 0, word, 0, 1);
-		System.arraycopy(char2, 0, word, 1, 1);
-		System.arraycopy(char3, 0, word, 2, 1);
-		//System.out.println(byteArrayToHex(word));
-		return word;
+	static byte[] reduce(byte[] digest, int i) throws UnsupportedEncodingException{
+		if (i%4==0){
+			return new byte[]{(byte)(digest[0]), (byte)(digest[1]), (byte)(digest[2])};
+		}else if(i%4==1){
+			return new byte[]{(byte)(digest[2]), (byte)(digest[3]), (byte)(digest[4])};
+		}else if (i%4==2){
+			return new byte[]{(byte)(digest[3]), (byte)(digest[4]), (byte)(digest[5])};
+		}else{
+			String hex_digest = byteArrayToHex(digest);
+			int reduction = hex_digest.hashCode();
+			byte[] arr = bytefy(reduction);
+			return arr;
+		}
+	}
+		
+	
+	
+	static byte[] bytefy(int number){
+		byte b1,b2,b3;
+		b3 = (byte)(number & 0xFF);
+		b2 = (byte)((number >> 8) & 0xFF);
+		b1 = (byte)((number >> 16) & 0xFF);
+		return new byte[]{b1, b2, b3};
 	}
 	
-	//Usage: RAINBOW.java <chain-num> <table-size> <starting word>
-	public static void main (String[] args) throws UnsupportedEncodingException {
-		final int NUM_CHAIN = (int) Math.pow(2, Integer.parseInt(args[0]));
-		final int TABLE_SIZE = (int) Math.pow(2, Integer.parseInt(args[1]));
-		Random r = new Random();
-		HashMap <String,Integer> a = new HashMap<String, Integer>();
-		int k = 0;
+	//for now store entire word and entire digest, to optimize later
+	static void insertToHashMap(String word, String lastdigest,int i){
+		switch (i) {
+		case 1:
+			rainbow_table.put(word, lastdigest);
+			break;
+			
+		case 2:
+			rainbow_table2.put(word, lastdigest);
+			break;
+			
+		case 3:
+			rainbow_table3.put(word, lastdigest);
+			break;
+			
+		case 4:
+			rainbow_table4.put(word, lastdigest);
+			break;
+		default:
+			break;
+		}
 		
-		String word = args[2];
-		int useless = 0;
-		byte[] byteword = null;
+	}
+
+	static void encodeRT2File() throws IOException{
+
+//			PrintWriter f = new PrintWriter("rainbow2.dat");
+//			rainbow_table.forEach((k,v) -> f.print(k+" "+v+" "));
+			FileOutputStream output = new FileOutputStream("compressed.gzip");
+			Writer f = new OutputStreamWriter(new GZIPOutputStream(output),"UTF-8");
+			rainbow_table.forEach((k,v) -> {try{
+												f.write(k+" "+v+" ");
+											}catch(Exception e){
+												System.err.println("Error occured");
+											}});
+			f.close();
+			output.close();
+		
+	}
+	 
+	
+	//Usage: RAINBOW.java <chain-num> <table-size>
+	public static void main (String[] args) throws Exception {
+		final int NUM_CHAIN = Integer.parseInt(args[0]);
+		final int TABLE_SIZE = Integer.parseInt(args[1]);
+		
+		int initial = 0;
 		byte[] digest = null;
-		int sums = 0;
-		byte[] initial_word = args[2].getBytes();
-		for (int j=0; j < TABLE_SIZE; j++){
-			for (int i=0; i< NUM_CHAIN; i++) {
-				k++;
-				if (byteword == null){
-					digest = sha1(word);
-					
-					//System.out.println(byteArrayToHex(digest));
-					word = byteArrayToHex(reduce(digest));
-					if (a.containsKey(word)){
-						//System.out.println(k+" ");
-						if (k == 1){
-							useless++;
-						}
-						sums += k;
-						break;
-					}else{
-						a.put(word, 1);
-						//System.out.println("ok");
-					}
-				}else{
+		byte[] digest2 = null;
+		byte[] digest3 = null;
+		byte[] digest4 = null;
+		int j = 0;
+		while (j < TABLE_SIZE){
+			ArrayList<String> chainOfWords = new ArrayList<String>();
+			byte[] byteword = bytefy(initial);
+			ArrayList<String> chainOfWords2 = new ArrayList<String>();
+			byte[] byteword2 = bytefy(initial);
+			ArrayList<String> chainOfWords3 = new ArrayList<String>();
+			byte[] byteword3 = bytefy(initial);
+			ArrayList<String> chainOfWords4 = new ArrayList<String>();
+			byte[] byteword4 = bytefy(initial);
+			
+			String firstword = byteArrayToHex(byteword);
+			//System.out.println(byteArrayToHex(byteword));
+			
+			chainOfWords.add(firstword);
+			digest = sha1(byteword);
+			chainOfWords2.add(firstword);
+			digest2 = sha1(byteword2);
+			chainOfWords3.add(firstword);
+			digest3 = sha1(byteword3);
+			chainOfWords4.add(firstword);
+			digest4 = sha1(byteword4);
+			int k = 0;
+			boolean discard = false;
+			for (int i=0; i < NUM_CHAIN-1 ; i++) {
+					k++;
+					byteword =  reduce(digest,i);
 					digest = sha1(byteword);
-					//System.out.println("digest after hash " + byteArrayToHex(digest));
-					byteword = reduce(digest);
-					//System.out.println("word after reduce " + byteArrayToHex(byteword));
-					if (a.containsKey(byteArrayToHex(byteword))){
-						//System.out.println(k+" ");
-						if (k == 1){
-							useless++;
-						}
-						sums += k;
-						break;
-					}else{
-						a.put(byteArrayToHex(byteword), 1);
-						//System.out.println("ok");
-					}
-				}
+					chainOfWords.add(byteArrayToHex(byteword));
+					byteword2 = reduce(digest,i+1);
+					digest2 = sha1(byteword2);
+					chainOfWords2.add(byteArrayToHex(byteword2));
+					byteword3 = reduce(digest,i+2);
+					digest3 = sha1(byteword3);
+					chainOfWords3.add(byteArrayToHex(byteword3));
+					byteword4 = reduce(digest,i+3);
+					digest4 = sha1(byteword4);
+					chainOfWords4.add(byteArrayToHex(byteword4));
+			}
+			if (discard == false){
+				//store the last digest first word
+				String digeststr = byteArrayToHex(digest);
+				insertToHashMap(firstword, digeststr, 1);
+				chainOfWords.forEach(a -> unique_words.put(a, 1));
+				
+				String digeststr2 = byteArrayToHex(digest2);
+				insertToHashMap(firstword, digeststr2, 2);
+				chainOfWords2.forEach(a -> unique_words.put(a, 1));
+				
+				String digeststr3 = byteArrayToHex(digest3);
+				insertToHashMap(firstword, digeststr3, 3);
+				chainOfWords3.forEach(a -> unique_words.put(a, 1));
+				
+				String digeststr4 = byteArrayToHex(digest4);
+				insertToHashMap(firstword, digeststr4, 4);
+				chainOfWords4.forEach(a -> unique_words.put(a, 1));
+				//System.out.println(j);
+				j++;
 			}
 			
-			if (initial_word[2] == 255){
-				initial_word[0] += 1;
-				initial_word[2] = 0;
-			}else{
-				initial_word[2] +=1;
-				if (r.nextBoolean()){
-					initial_word[1] += 1;
-				}else{
-					initial_word[1] = (byte)(initial_word[1] + initial_word[0] % 256);
-				}
-			}
-			//byteword = initial_word;
-			byteword = Arrays.copyOfRange(digest, 4, 7);
-			//System.out.println("new starting "+j+" " + byteArrayToHex(byteword));
-			k = 0;
+			digest = null;
+			byteword = null;
+			digest2 = null;
+			byteword2 = null;
+			digest3 = null;
+			byteword3 = null;
+			digest4 = null;
+			byteword4 = null;
+			initial += 1;		
 		}
-		System.out.println("average chain Length "+ (sums/TABLE_SIZE));
-		System.out.println(useless);
+		encodeRT2File();
+		System.out.println("total unique words " + unique_words.size());
 	}
 	
 }
