@@ -108,7 +108,7 @@ public class INVERT {
 			while (internalhash < 1005){
 				//System.out.println(RAINBOW.byteArrayToHex(bytedigest) + " is to "+ RAINBOW.byteArrayToHex(querybyte));
 				if	(!bytedigest.equals(querybyte)){
-					wordbyte = RAINBOW.reduce(bytedigest,1);
+					wordbyte = RAINBOW.reduce(bytedigest,1,0);
 					bytedigest = RAINBOW.sha1(wordbyte);
 					internalhash++;
 				}else{
@@ -129,7 +129,7 @@ public class INVERT {
 		ArrayList<String> chainHeads = new ArrayList<String>();
 		//while yet to find a end of chain
 		while (!RTchainend.contains(digest)){
-			byte[] word = RAINBOW.reduce(RAINBOW.hexToByteArray(digest),1);
+			byte[] word = RAINBOW.reduce(RAINBOW.hexToByteArray(digest),1, 0);
 			digest = RAINBOW.byteArrayToHex(RAINBOW.sha1(word));
 			num_hashes++;
 		}
