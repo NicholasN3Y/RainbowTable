@@ -3,8 +3,12 @@ import java.util.Base64;
 
 
 public class Conversion {
-	public static String toBase64(byte[] a){
+	static String toBase64(byte[] a){
 		return Base64.getEncoder().encodeToString(a);
+	}
+	
+	static String toBase64(String a){
+		return toBase64(hexToByteArray(a));
 	}
 	
 	static String byteArrayToHex(byte[] input){
@@ -22,4 +26,5 @@ public class Conversion {
 	public static boolean compareBase64(){
 		return true;
 	}
+	
 }
