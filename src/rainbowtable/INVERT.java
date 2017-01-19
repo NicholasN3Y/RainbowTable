@@ -5,163 +5,183 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.PrintWriter;
 import java.io.Reader;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.zip.GZIPInputStream;
 
-import com.sun.javafx.collections.SortableList;
-import com.sun.org.apache.bcel.internal.generic.Select;
-import com.sun.org.apache.xalan.internal.xsltc.compiler.util.StringStack;
+import com.sun.corba.se.spi.orbutil.fsm.Input;
+import com.sun.org.apache.bcel.internal.generic.StackInstruction;
 
-import javafx.animation.RotateTransitionBuilder;
-import jdk.internal.dynalink.beans.StaticClass;
 import rainbowtable.RAINBOW;
-import sun.swing.text.TextComponentPrintable;
 
 /*
  * Program such that on input of 5000 digests, can make use of RAINBOW.java to quickly find a preimage
  */
 public class INVERT {
 	static HashMap<String, ArrayList<Integer>> RTTable = new HashMap<String, ArrayList<Integer>>();
-	static ArrayList<String> RTchainend = new ArrayList<String>();
+	static ArrayList<String> RTchainend1 = new ArrayList<String>();
+	static ArrayList<String> RTchainend2 = new ArrayList<String>();
+	static ArrayList<String> RTchainend3 = new ArrayList<String>();
+	static ArrayList<String> RTchainend4 = new ArrayList<String>();
 	static int num_hashes = 0;
-	static ArrayList<String> permuchain1 = null;
-	static ArrayList<String> permuchain2 = null;
-	static ArrayList<String> permuchain3 = null;
+	static int global_success_total = 0;
+	static int global_hashes = 0;
+
 	private static void loadR_Table(String RTfilepath) throws Exception{
 		String filename = RTfilepath;
 		if (RTfilepath == null){
 			filename = "rainbow.dat";
 		}
 		FileInputStream input = new FileInputStream(new File(filename));
-		GZIPInputStream r = new GZIPInputStream(input);
-		int i= 1;
-		while(true){
-			try{
-				byte[] digest = new byte[10];
-				int a = r.read(digest, 0, 10);
-				if (a == -1){
-					break;
-				}
-				String chain_end = new String(digest);
-				RTchainend.add(chain_end);
-			}catch (Exception e){
-				System.out.println(e);
-				break;
-			}
-			i++;
-		}
-		System.out.println("Done building rainbowtable of size"+ (i-1));
-		//invertlisting of the terms;
-
-		for (int c = 0; c < RTchainend.size(); c++){
-			String dg = RTchainend.get(c);
-			if (RTTable.containsKey(dg)){
-				RTTable.get(dg).add(c);
+		InputStream uncompressed = new GZIPInputStream(input);
+		Reader reader = new InputStreamReader(uncompressed);
+		char[]dig = new char[10];
+		int pointer =0;
+		int k = 0;;
+		for (int length = 0;(length = reader.read(dig)) > 0;){
+			pointer+=length;
+			
+			String digest = null;
+			digest = new String(dig);
+			assert (digest.length()==10);
+			if (k<56500){
+				RTchainend1.add(digest);
+			}else if (k< 2*56500){
+				RTchainend2.add(digest);
+			}else if(k < 3*56500){
+				RTchainend3.add(digest);
 			}else{
-				RTTable.put(dg, new ArrayList<Integer>());
-				RTTable.get(dg).add(c);
+				RTchainend4.add(digest);
 			}
-			if (RTTable.size() == 1){
-			System.out.println(RTchainend.get(0));
-			System.out.print(dg + " " + c);
-			}
-
+			k++;
 		}
-
-		r.close();
+				
+		System.out.println("Done building rainbow table");
+		System.out.println(RTchainend1.get(0));
+		//invertlisting of the terms
 	}
 
 	private static void initiateQuerySequence(FileReader queries) throws IOException{
+		
 		BufferedReader r = new BufferedReader(queries);
 		String a = null;
-		while ((a = r.readLine()) != null){
+		int solved= 0;
+		int cardinality = 0;
+		try{
+		while ((a = r.readLine()) != null && (a.length() > 15)){
+			cardinality++;
 			a = a.trim();
 			String[] tokens = a.split(" ");
 			String digest = String.join("", tokens);
 			num_hashes = 0;
-			String result = queryTable(digest);
-			System.out.println(result+" hashes to "+ digest);
-			//printResultToFile(result);
+			String result = "0";
+			byte[] word = queryTable(digest);
+			try {
+				result = Conversion.byteArrayToHex(word);
+			}catch(Exception e){
+				;
+			}
+			global_hashes +=num_hashes;
+			if (!result.equals("0")){
+				solved++;
+				global_success_total+= num_hashes;
+			}
+			System.out.println(result +" -> "+ digest +" => "+ num_hashes+ " hashes");
+			//System.out.println(result);
 		}
+		}catch (Exception e){
+			
+		}
+		System.out.println("solved = "+solved);
+		System.out.println("total hashes invoked for successful =" + global_success_total);
+		System.out.println("total hashes invoked overall =" + global_hashes);
+		double F = solved * Math.pow(23,2) / global_success_total ;
+		System.out.println("F = "+F);
 	}
 
-	private static String queryTable(String digest) throws UnsupportedEncodingException{
-		//while yet to find a end of chain
-		ArrayList<Integer> candi = check(Conversion.hexToByteArray(digest));
-		if (candi != null){
-			String result = scanRT(candi,digest);
-			if (result != null){
-				return result;
+	private static byte[] queryTable(String digest_query) throws UnsupportedEncodingException{
+		byte[] res = new byte[3];
+
+		for (int i = 199; i>=0; i--){
+			String chain1 = findChainFirstWord(digest_query,0, i);
+			int indexOnRT1 = RTchainend1.indexOf(chain1);
+			if ( indexOnRT1 > -1){
+				res = resolveQuery(digest_query, indexOnRT1, 0);
+				if(res != null){
+					return res;
+				}
 			}
 		}
-
-		for (int i = 0; i < 199; i++) {
-			byte[] word1 = RAINBOW.reduce(Conversion.hexToByteArray(digest), 1, i); // % = 0
-			byte[] word2 = RAINBOW.reduce(Conversion.hexToByteArray(digest), 1, i+1); // % = 1
-			byte[] word3 = RAINBOW.reduce(Conversion.hexToByteArray(digest), 1, i+2); // % = 2
-			byte[] digest1 =  RAINBOW.sha1(word1);
-			num_hashes++;
-			byte[] digest2 = RAINBOW.sha1(word2);
-			num_hashes++;
-			byte[] digest3 = RAINBOW.sha1(word3);
-			num_hashes++;
-			ArrayList<Integer> ismatch = null;
-			String found = null;
-			if (i%3 == 1){
-				ismatch = check(digest1);
-				if (ismatch != null){
-					found = scanRT(ismatch, digest);
-				}
-			}else if ((i+1)%3 == 1){
-				ismatch = check(digest2);
-				if (ismatch != null){
-					found = scanRT(ismatch, digest);
-				}
-			}else if ((i+2)%3 == 1){
-				ismatch = check(digest3);
-				if (ismatch != null){
-					found = scanRT(ismatch, digest);
+		for (int i = 199; i>=0; i--){
+			String chain2 = findChainFirstWord(digest_query,1, i);
+			int indexOnRT2 = RTchainend2.indexOf(chain2);
+			if (indexOnRT2 > -1){
+				res = resolveQuery(digest_query, indexOnRT2, 1);
+				if(res != null){
+					return res;
 				}
 			}
-			if (found != null){
-				return found;
+		}
+		for (int i = 199; i>=0; i--){
+			String chain3 = findChainFirstWord(digest_query,2, i);
+			int indexOnRT3 = RTchainend3.indexOf(chain3);
+			if (indexOnRT3 > -1){
+				res = resolveQuery(digest_query, indexOnRT3, 2);
+				if(res != null){
+					return res;
+				}
+			}
+		}
+		for (int i = 199; i>=0; i--){
+			String chain4 = findChainFirstWord(digest_query,3, i);
+			int indexOnRT4 = RTchainend4.indexOf(chain4);
+			if (indexOnRT4 > -1){
+				res = resolveQuery(digest_query, indexOnRT4, 3);
+				if(res != null){
+					return res;
+				}
 			}
 		}
 		return null;
+
 	}
 
-	private static ArrayList<Integer> check(byte[] candidate){
-		String digest = Conversion.byteArrayToHex(candidate);
+	private static String findChainFirstWord(String query, int seed ,int start) throws UnsupportedEncodingException{
+		byte[]word = new byte[3];
+		byte[]digest = Conversion.hexToByteArray(query);
+		for (int i = start; i < 199; i++){
+			word = RAINBOW.reduce(digest, seed, i);
+			digest = RAINBOW.sha1(word);
+			num_hashes++;
+		}
+		String candidate = Conversion.byteArrayToHex(digest);
 		String comparable = "";
-		for (int pos=0; pos < 40; pos += 4){
-			comparable = comparable+digest.charAt(pos);
+		//System.out.print(RTchainend1.get(30201));
+		for (int pos = 0; pos < 40; pos += 4){
+			comparable = comparable+candidate.charAt(pos);
 		}
-		return RTTable.get(comparable);
+		return comparable;
 	}
 
-	private static String scanRT(ArrayList<Integer> candidateChains, String query) throws UnsupportedEncodingException{
-		for (int a:candidateChains){
-			int initial = a * 2;
-			int k = 0;
-			byte[] byteword = RAINBOW.bytefy(initial);
-			System.out.println(Conversion.byteArrayToHex(byteword));
+	private static byte[] resolveQuery(String goaldigest, int words, int seed) throws UnsupportedEncodingException{
+		byte[] byteword = RAINBOW.bytefy(words);
+		for (int i = 0; i< 200; i++){
 			byte[] digest = RAINBOW.sha1(byteword);
-			for (int i=0; i < 200 ; i++) {
-				k++;
-				String candidate = Conversion.byteArrayToHex(digest);
-				System.out.println(Conversion.byteArrayToHex(byteword));
-				if (candidate.equals(query)){
-					return Conversion.byteArrayToHex(byteword);
-				}
-				byteword =  RAINBOW.reduce(digest, 1, k);
-				digest = RAINBOW.sha1(byteword);
+			num_hashes++;
+			String candid = Conversion.byteArrayToHex(digest);
+			//System.out.println("digest "+Conversion.byteArrayToHex(digest));
+			if (candid.equals(goaldigest)){
+				return byteword;
 			}
+			byteword = RAINBOW.reduce(digest,seed, i);
+			//System.out.println("reduced word "+Conversion.byteArrayToHex(byteword));
 		}
+		//System.out.println("not on this chain");
 		return null;
 	}
 
@@ -178,7 +198,7 @@ public class INVERT {
 			}
 			initiateQuerySequence(queries);
 		}catch (Exception e){
-			System.out.println(e.getMessage());
+			e.printStackTrace();
 		}
 
 	}
